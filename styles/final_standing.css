@@ -1,0 +1,53 @@
+.final-wrapper {
+    padding-left: 22px;
+    padding-right: 22px;
+}
+
+.final-score-grid {
+    gap: 28px;
+}
+
+.final-wrapper .score-row {
+    height: 55px;
+    margin-bottom: 12px;
+    grid-template-columns: 40px minmax(0, 1fr);
+}
+
+.final-wrapper .rank-pill {
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+}
+
+.final-wrapper .moving-pad {
+    grid-template-columns: 76px minmax(0, 1fr) 66px;
+}
+
+.final-wrapper .flag-circle {
+    width: 56px;
+    height: 41px;
+}
+
+.final-wrapper .country-bar {
+    height: 41px;
+    width: calc(100% + 88px);
+    margin-left: -64px;
+    margin-right: -24px;
+    padding-left: 74px;
+    padding-right: 32px;
+}
+
+.final-wrapper .country-name {
+    font-size: 15.5px;
+    left: -22px;
+}
+
+.final-wrapper .points-box {
+    width: 66px;
+    min-width: 66px;
+    max-width: 66px;
+    height: 41px;
+    padding-left: 15px;
+    padding-right: 9px;
+    font-size: 16px;
+}
