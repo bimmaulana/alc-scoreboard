@@ -178,7 +178,6 @@ def validate_workbook_data(
 
     # Automatic flag QC. Flag Override is intentionally URL-only for the
     # deployed app because the server cannot read a path on the user's device.
-    codes = []
     # Televote needs the same HoD/flag metadata for its calling screen, even
     # though it is excluded from ranking and from participant-count checks.
     for country in participant_names + sorted(televote_names):
@@ -195,8 +194,6 @@ def validate_workbook_data(
                 errors.append(
                     f"Country code for {country} must use either AA or AA-XXX format: {code}"
                 )
-            else:
-                codes.append(code)
         elif not override:
             errors.append(
                 f"Country code is blank for {country}; add a code such as AA or AA-XXX "
@@ -218,10 +215,6 @@ def validate_workbook_data(
                 f"Flag/emblem could not be resolved automatically for {country} "
                 f"({code or 'no code'})."
             )
-
-    duplicate_codes = sorted({code for code in codes if codes.count(code) > 1})
-    for code in duplicate_codes:
-        warnings.append(f"Country code '{code}' is used by more than one participant.")
 
     for label, asset_value in (
         ("Background", background_file),
