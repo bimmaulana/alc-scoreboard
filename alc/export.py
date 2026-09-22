@@ -64,6 +64,12 @@ def build_result_excel_bytes(
         country for country in participants_df.sort_values("ParticipantNo")["Country"].tolist()
         if country in voter_col_by_country
     ]
+    # Televote is not a standings row, but must be included as a vote column.
+    # Its internal (*) marker was already removed when the workbook was read.
+    ordered_voters.extend(
+        voter for voter in voting_countries
+        if country_info.get(voter, {}).get("IsTelevote", False)
+    )
     headers = ["No", "HOD", "Country", "Sum", "Rk", "# Votes", "# 20 pts"] + [
         country_info.get(c, {}).get("HoD", c) for c in ordered_voters
     ]
@@ -101,7 +107,8 @@ def build_result_excel_bytes(
         cell.alignment = centered
         cell.border = cell_border
 
-    # build_ranking_dataframe uses a 1-based index; preserve that exact Rk.
+    # Preserve audited raw vote totals for DQ contestants in the export, but
+    # never award them a competitive rank (the public display hides totals).
     for out_row, (rank, row) in enumerate(final_ranking.iterrows(), start=2):
         country = row["Country"]
         info = country_info.get(country, {})
@@ -110,7 +117,7 @@ def build_result_excel_bytes(
             info.get("HoD", ""),
             country,
             int(row["Points"]),
-            int(rank),
+            "DQ" if bool(row["IsDQ"]) else int(rank),
             int(row["Voters"]),
             int(row.get("P20", 0)),
         ]

@@ -25,6 +25,10 @@ def build_ranking_dataframe(
       2. Number of voters awarding points
       3. Number of highest-value awards, descending through all point values
       4. Country name alphabetically as a deterministic final fallback
+
+    Contestants without a voting column are marked IsDQ in country_info.
+    Their raw points remain in the returned data for internal bookkeeping,
+    but they always appear after ranked contestants, alphabetically within DQ.
     """
     descending_points = sorted(points_order, reverse=True)
 
@@ -62,6 +66,7 @@ def build_ranking_dataframe(
             "FallbackFlag": info.get("FallbackFlag", ""),
             "Points": int(totals.get(country, 0) or 0),
             "Voters": stats["voters_count"],
+            "IsDQ": bool(info.get("IsDQ", False)),
         }
         for points in descending_points:
             row[f"P{points}"] = stats[f"count_{points}"]
@@ -75,9 +80,11 @@ def build_ranking_dataframe(
     )
     sort_ascending = [False] * (len(sort_columns) - 1) + [True]
 
-    dataframe = dataframe.sort_values(
+    active = dataframe.loc[~dataframe["IsDQ"]].sort_values(
         by=sort_columns,
         ascending=sort_ascending,
-    ).reset_index(drop=True)
+    )
+    disqualified = dataframe.loc[dataframe["IsDQ"]].sort_values(by="Country")
+    dataframe = pd.concat([active, disqualified], ignore_index=True)
     dataframe.index += 1
     return dataframe

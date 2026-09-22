@@ -78,6 +78,9 @@ def validate_workbook_data(
 
     participant_names = participants["Country"].astype(str).str.strip().tolist()
     participant_set = set(participant_names)
+    televote_names = {
+        name for name, info in country_info.items() if info.get("IsTelevote", False)
+    }
 
     duplicate_participants = sorted({
         country for country in participant_names
@@ -109,13 +112,18 @@ def validate_workbook_data(
     for voter in duplicate_voters:
         errors.append(f"Duplicate voter in Votes sheet: {voter}")
 
-    unknown_voters = sorted(set(voting_countries) - participant_set)
+    unknown_voters = sorted(set(voting_countries) - participant_set - televote_names)
     for voter in unknown_voters:
-        errors.append(f"Voter is not listed in Participants: {voter}")
+        errors.append(f"Voter is not listed in Participants (or as televote): {voter}")
 
+    for televote in televote_names:
+        if televote not in voting_countries:
+            errors.append(f"Televote has no voting column in Votes: {televote}")
+
+    # Missing participant voting columns are now treated as an automatic DQ
+    # rule, not as a workbook QC issue. The contestant remains in the contest
+    # data and is handled later by the ranking / display logic.
     missing_voters = sorted(participant_set - set(voting_countries))
-    for voter in missing_voters:
-        warnings.append(f"Participant has no voting column: {voter}")
 
     missing_point_rows = [points for points in POINTS_ORDER if points not in point_to_row]
     for points in missing_point_rows:
@@ -171,7 +179,9 @@ def validate_workbook_data(
     # Automatic flag QC. Flag Override is intentionally URL-only for the
     # deployed app because the server cannot read a path on the user's device.
     codes = []
-    for country in participant_names:
+    # Televote needs the same HoD/flag metadata for its calling screen, even
+    # though it is excluded from ranking and from participant-count checks.
+    for country in participant_names + sorted(televote_names):
         info = country_info.get(country, {})
         if not clean_text(info.get("HoD", "")):
             warnings.append(f"HoD name is blank for {country}.")

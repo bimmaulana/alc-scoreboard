@@ -8,7 +8,7 @@ from urllib.parse import quote
 import pandas as pd
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-FLAG_LOADER_VERSION = "deploy-split-workbooks-v1-20260620"
+FLAG_LOADER_VERSION = "deploy-split-workbooks-v3-optional-televote-auto-dq-20260922"
 FLAG_CDN_BASE = "https://flagcdn.com"
 COMMONS_FILEPATH_BASE = "https://commons.wikimedia.org/wiki/Special:FilePath/"
 COUNTRY_CODE_ALIASES = {
@@ -157,6 +157,17 @@ def clean_text(value):
     if pd.isna(value):
         return ""
     return str(value).strip()
+
+
+def parse_voting_name(value):
+    """Return (visible name, is_televote) for a spreadsheet name.
+
+    A trailing * is an internal marker, never part of the displayed name.
+    Plain names continue to work unchanged for editions without televoting.
+    """
+    name = clean_text(value)
+    is_televote = name.endswith("*")
+    return (name[:-1].strip() if is_televote else name), is_televote
 
 
 def is_web_url(value):
@@ -354,6 +365,26 @@ def load_data(excel_file):
         participants[column] = participants[column].apply(clean_text)
 
     participants = participants[participants["Country"] != ""].reset_index(drop=True)
+    # The optional televote has metadata (flag/HoD) for its calling screen,
+    # but is never a contestant in rankings or the scoreboard.
+    parsed_names = participants["Country"].apply(parse_voting_name)
+    participants["IsTelevote"] = parsed_names.apply(lambda parsed: parsed[1])
+    participants["Country"] = parsed_names.apply(lambda parsed: parsed[0])
+    televote_rows = participants[participants["IsTelevote"]]
+    if len(televote_rows) > 1:
+        raise WorkbookLoadError(
+            "Only one televote is allowed per edition. Combine televotes into "
+            "a single marked (*) row in Participants and a single voting column."
+        )
+    if any(not name for name in participants["Country"]):
+        raise WorkbookLoadError("A participant or televote name cannot consist only of '*'.")
+    if participants["Country"].duplicated().any() and not televote_rows.empty:
+        # Also catches a televote whose visible name duplicates a contestant.
+        duplicated = participants.loc[participants["Country"].duplicated(False), "Country"].tolist()
+        if any(name == televote_rows.iloc[0]["Country"] for name in duplicated):
+            raise WorkbookLoadError(
+                "Televote must have a distinct name from every participant."
+            )
     participants["ParticipantNo"] = pd.to_numeric(
         participants["ParticipantNo"], errors="coerce"
     )
@@ -383,16 +414,41 @@ def load_data(excel_file):
             "Flag": row["Flag"],
             "FallbackFlag": row["FallbackFlag"],
             "No": int(row["ParticipantNo"]),
+            "IsTelevote": bool(row["IsTelevote"]),
+            "IsDQ": False,
         }
+
+    participants = participants[~participants["IsTelevote"]].copy().reset_index(drop=True)
 
     # Voting order follows the physical left-to-right order in the Votes sheet.
     voter_col_by_country = {}
     voting_countries = []
+    televote_voter_count = 0
     for col_idx, value in enumerate(votes.iloc[1, 1:].tolist(), start=1):
-        value = clean_text(value)
+        value, marked_televote = parse_voting_name(value)
         if value:
+            if marked_televote:
+                televote_voter_count += 1
+                if televote_voter_count > 1:
+                    raise WorkbookLoadError(
+                        "Only one marked (*) televote column is allowed in Votes. "
+                        "Combine televotes into one set of points."
+                    )
+            info = country_info.get(value)
+            if info is not None and bool(info["IsTelevote"]) != marked_televote:
+                raise WorkbookLoadError(
+                    f"The (*) televote marker for '{value}' must match in "
+                    "Participants and Votes."
+                )
             voter_col_by_country[value] = col_idx
             voting_countries.append(value)
+
+    # A contestant without a voting column is automatically disqualified.
+    # The contestant stays in Participants / country_info so votes received
+    # remain auditable; only the competitive ranking treats them differently.
+    participants["IsDQ"] = ~participants["Country"].isin(voting_countries)
+    for _, row in participants.iterrows():
+        country_info[row["Country"]]["IsDQ"] = bool(row["IsDQ"])
 
     point_to_row = {}
     for row_idx in range(2, len(votes)):
