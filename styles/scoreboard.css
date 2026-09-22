@@ -339,6 +339,26 @@ body { color: var(--alc-general-dark-text); }
     color: var(--alc-score-gain-text);
 }
 
+/* Automatic DQ: keep the contestant visible, but never show their score. */
+.score-row.dq-row .rank-pill {
+    background: #9b414b;
+    color: #ffffff;
+    font-size: 12px;
+}
+
+.score-row.dq-row .points-box {
+    background: var(--alc-score-points-bg);
+    color: var(--alc-score-points-text) !important;
+}
+
+.score-row.dq-row .country-bar {
+    opacity: 1;
+}
+
+.score-row.dq-row .country-name {
+    color: rgba(0, 0, 0, 0.62);
+}
+
 .point-bubble,
 .fly-ball {
     background: radial-gradient(
