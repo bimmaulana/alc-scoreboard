@@ -1416,6 +1416,9 @@ def render_rows(df):
         country = clean_text(row["Country"])
         country_attr = escape_html_text(country)
         country_label = escape_html_text(country.upper())
+        is_dq = bool(row["IsDQ"])
+        rank_label = "DQ" if is_dq else f"{rank:02d}"
+        row_class = " dq-row" if is_dq else ""
         old_slot = pre_slot.get(country, int(rank) - 1)
         new_slot = post_slot.get(country, int(rank) - 1)
 
@@ -1434,7 +1437,7 @@ def render_rows(df):
             f"--row-slide: {ANIMATION.row_slide_ms}ms;"
         )
 
-        badge_points = current_vote_badges.get(country)
+        badge_points = None if is_dq else current_vote_badges.get(country)
         badge_html = ""
         if badge_points:
             delay = latest_badge_delay_ms.get(country, 0)
@@ -1443,22 +1446,33 @@ def render_rows(df):
             else:
                 badge_html = f'<div class="vote-gain-badge">+{badge_points}</div>'
 
-        final_points = int(row["Points"])
-        flying_added = int(current_fly_points.get(country, 0) or 0)
-        display_points = final_points - flying_added if flying_added else final_points
-        points_delay = latest_badge_delay_ms.get(country, 0)
-        points_extra_class = " points-waiting" if flying_added else ""
+        if is_dq:
+            # Never put a DQ contestant's totals into public HTML, including
+            # the attributes used by the flying-ball landing animation.
+            points_html = '<div class="points-box dq-points" aria-label="Disqualified">-</div>'
+        else:
+            final_points = int(row["Points"])
+            flying_added = int(current_fly_points.get(country, 0) or 0)
+            display_points = final_points - flying_added if flying_added else final_points
+            points_delay = latest_badge_delay_ms.get(country, 0)
+            points_extra_class = " points-waiting" if flying_added else ""
+            points_html = (
+                f'<div class="points-box{points_extra_class}" '
+                f'data-final-points="{final_points}" '
+                f'data-display-points="{display_points}" '
+                f'data-points-delay="{points_delay}">{display_points}</div>'
+            )
 
         output += f"""
-        <div class="score-row" data-nonce="{nonce}">
-            <div class="rank-pill">{rank:02d}</div>
+        <div class="score-row{row_class}" data-nonce="{nonce}">
+            <div class="rank-pill">{rank_label}</div>
             <div class="moving-pad{anim_class}" data-country="{country_attr}" style="{style}">
                 <div class="flag-circle">{flag_html(row["Flag"], GEOMETRY.flag_width_px, GEOMETRY.flag_height_px, True, row.get("FallbackFlag", ""))}</div>
                 <div class="country-bar">
                     <div class="country-name">{country_label}</div>
                 </div>
                 {badge_html}
-                <div class="points-box{points_extra_class}" data-final-points="{final_points}" data-display-points="{display_points}" data-points-delay="{points_delay}">{display_points}</div>
+                {points_html}
             </div>
         </div>
         """
@@ -1471,18 +1485,24 @@ def render_final_rows(df):
     output = ""
     for rank, row in df.iterrows():
         country = clean_text(row["Country"])
-        points = int(row["Points"])
+        is_dq = bool(row["IsDQ"])
+        rank_label = "DQ" if is_dq else f"{rank:02d}"
+        row_class = " dq-row" if is_dq else ""
+        points_html = (
+            '<div class="points-box dq-points" aria-label="Disqualified">-</div>'
+            if is_dq else f'<div class="points-box">{int(row["Points"])}</div>'
+        )
         safe_country = escape_html_text(country)
         country_label = escape_html_text(country.upper())
         output += f"""
-        <div class="score-row">
-            <div class="rank-pill">{rank:02d}</div>
+        <div class="score-row{row_class}">
+            <div class="rank-pill">{rank_label}</div>
             <div class="moving-pad" data-country="{safe_country}">
                 <div class="flag-circle">{flag_html(row["Flag"], GEOMETRY.flag_width_px, GEOMETRY.flag_height_px, True, row.get("FallbackFlag", ""))}</div>
                 <div class="country-bar">
                     <div class="country-name">{country_label}</div>
                 </div>
-                <div class="points-box">{points}</div>
+                {points_html}
             </div>
         </div>
         """
